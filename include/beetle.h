@@ -8,3 +8,11 @@ void run_pinch(const char *device_name);
 void run_puncture(const char *file_path);
 
 #endif
+
+/*
+- log : Network and IP auditing
+- crawl : Hardware scraping, recover hard-deleted files
+- trail : File tracer, finding source of a file
+- pinch : locking/protecting the Shell Disk from corruption
+- puncture : hard-delete files
+*/
