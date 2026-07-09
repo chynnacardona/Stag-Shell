@@ -5,8 +5,9 @@
 #include <sys/types.h> //Unlocks the pid_t variable type
 #include <sys/wait.h> //Unlocks the wait() synchronization function
 #include "../include/chassis.h"
+#include "../include/beetle.h"
 
-//temporary & static placeholder
+/*temporary & static placeholder
 int run_pinch(const char *device_name) {
     //sdb is a standardized hardware name given to a physical storage drive. (for Linux/Unix)
     if (strcmp(device_name, "sdb") == 0) {
@@ -19,7 +20,7 @@ int run_pinch(const char *device_name) {
         printf("Error: Device %s is not recognized as the Shell Disk.\n", device_name);
     }
     return 0; 
-}
+}*/
 
 void run_crawl(const char *device_path) {
     printf("[*] 🪲 Beetle crawling raw sectors on %s... done.\n", device_path);
@@ -28,6 +29,7 @@ void run_crawl(const char *device_path) {
 int main() {
     char line[MAX_LINE];
     char *args[MAX_ARGS];
+    char safe_path[265];
 
     printf("[*] 🪲 Stag Shell initializing components...\n");
 
@@ -71,10 +73,27 @@ int main() {
         }
 
         if (strcmp(args[0], "pinch") == 0) {
+            if (arg_count < 2) {
+                printf("[!] Usage: pinch <device_name>\n");
+            } else {
+                memset(safe_path, 0, sizeof(safe_path));
+                strncpy(safe_path, args[1], sizeof(safe_path) - 1);
+                run_pinch(safe_path);
+            }
             continue;
         }
 
         if (strcmp(args[0], "crawl") == 0) {
+            if (strcmp(args[0], "crawl") == 0) {
+                if (arg_count < 2 ) {
+                    printf("[!] Usage: crawl <device_path>\n");
+                } else {
+                    memset(safe_path, 0, sizeof(safe_path));
+                    strncpy(safe_path, args[1], sizeof(safe_path) - 1);
+                    
+                    run_crawl(safe_path);
+                }
+            }
             continue;
         }
 
