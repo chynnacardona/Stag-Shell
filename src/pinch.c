@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include "../include/beetle.h"
 
 #if defined (__linux__)
     #include <sys/mount.h> //sufficient for Linux, automatically pulls everything
@@ -27,12 +28,18 @@ int run_pinch(const char *device_name) {
         }
     #elif defined (__APPLE__) || defined (__FreeBSD__) 
         // macOS/FreeBSD-specific code to lock the device
-        if (mount("devfs", device_name, MNT_RDONLY | MNT_UPDATE, NULL) == 0) {
-            printf("[*] Device %s is now locked and protected from corruption.\n", device_name);
-            return 1; // Success
+        if (mount("hfs", device_name, MNT_RDONLY | MNT_UPDATE, NULL) == 0) {
+            if (mount("", device_name, MNT_RDONLY | MNT_UPDATE, NULL) == 0) {
+                printf("[*] Device %s is now locked and protected from corruption.\n", device_name);
+                return 1; // Success
+            } else {
+                perror("Error locking device");
+                return 0; // Failure
+            }
+           
         } else {
-            perror("Error locking device");
-            return 0; // Failure
+             printf("[*] Device %s is now locked and protected from corruption.\n", device_name);
+            return 1; // Failure
         }
     #elif defined (_WIN32)
         /*
