@@ -1,30 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h> //Unlocks fork() and getpid()
 #include <sys/types.h> //Unlocks the pid_t variable type
 #include <sys/wait.h> //Unlocks the wait() synchronization function
 #include "../include/chassis.h"
 #include "../include/beetle.h"
 
-/*temporary & static placeholder
-int run_pinch(const char *device_name) {
-    //sdb is a standardized hardware name given to a physical storage drive. (for Linux/Unix)
-    if (strcmp(device_name, "sdb") == 0) {
-        printf("Pinching the Shell Disk...\n");
-        // Implement the logic to lock/protect the Shell Disk from corruption
-        // This could involve setting file permissions, using system calls, etc.
-        // For demonstration purposes, we'll just print a message.
-        printf("Shell Disk %s is now locked and protected from corruption.\n", device_name);
-    } else {
-        printf("Error: Device %s is not recognized as the Shell Disk.\n", device_name);
-    }
-    return 0; 
-}*/
-
-void run_crawl(const char *device_path) {
-    printf("[*] 🪲 Beetle crawling raw sectors on %s... done.\n", device_path);
-}
+void parse_args(char *input, char **args);
 
 int main() {
     char line[MAX_LINE];
@@ -53,19 +37,15 @@ int main() {
 
         line[strcspn(line, "\n")] = 0; // Remove the newline character
 
-        //tokenize or chop individual arguments from terminal input
-        int arg_count = 0;
-        char *token = strtok(line, " ");
-        while (token != NULL && arg_count < MAX_ARGS - 1) {
-            args[arg_count++] = token;
-            token = strtok(NULL, " ");
-        }
-        args[arg_count] = NULL; // Null-terminate the argument list
+        parse_args(line, args);
 
-        if (arg_count == 0) {
-            continue; // No command entered
+        //instead of tokenizing
+        int arg_count = 0;
+        
+        while (args[arg_count] != NULL) {
+            arg_count++;
         }
-    
+        
         //Exit Command
         if (strcmp(args[0], "exit") == 0) {
             printf("[*] Exiting Stag Shell...\n");
@@ -90,7 +70,7 @@ int main() {
                 } else {
                     memset(safe_path, 0, sizeof(safe_path));
                     strncpy(safe_path, args[1], sizeof(safe_path) - 1);
-                    
+
                     run_crawl(safe_path);
                 }
             }
@@ -132,4 +112,33 @@ int main() {
     }
 
     return 0;
+}
+
+void parse_args(char *input, char **args) {
+    int arg_count = 0;
+    bool in_quotes = false;
+    char *start = input;
+
+    for (char *ptr = input; *ptr != '\0'; ptr++) {
+        if (*ptr == '"') {
+            in_quotes = !in_quotes; // Toggle the in_quotes flag
+
+            memmove(ptr, ptr + 1, strlen(ptr)); 
+            ptr--;
+            continue;
+        } 
+        
+        if (*ptr == ' ' && !in_quotes) {
+            *ptr = '\0';
+            if (strlen(start) > 0) {
+                args[arg_count++] = start;
+            }
+            start = ptr + 1;
+        }
+    }
+
+    if (strlen(start) > 0) {
+        args[arg_count++] = start;
+    }
+    args[arg_count] = NULL;
 }
