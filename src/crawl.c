@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> //Unlocks fork() and getpid()
-#include <sys/stat.h> 
-#include <dirent.h> //Allows to open and read folder components
+#include <sys/stat.h> //System FIle Status -- manages file attributes, metadata and security permissions
+#include <dirent.h> //Allows to open and read folder components, Directory entries
 #include "../include/beetle.h"
 
 typedef struct {
@@ -47,31 +46,51 @@ void run_crawl(const char *device_path) {
             return;
         }
 
+        //sectors are the containers of each byte of a file
         unsigned char sector[512]; // Buffer to hold the sector data
+        //512 is the fundamental hardware sector size for legacy hard drives, storage devices, and file systems
         unsigned long sectors_scraped = 0;
         unsigned long files_recovered = 0;
 
+        /*
+        Loops continuously, reading exactly 512 bytes from the raw storage disk into 
+        memory during each cycle. The loop count increments (sectors_scraped++) to map out 
+        exactly how deep down the disk geometry the carver has traveled.
+        */
         while (fread(sector, 1, sizeof(sector), disk) == sizeof(sector)) {
             sectors_scraped++;
 
             for (size_t i = 0; i < num_signatures; i++) {
+                //Gets the sectors's (file) magic bytes and byte length (if file is either of the signatures)
                 if (memcmp(sector, signatures[i].magic_bytes, signatures[i].length) == 0) {
                     printf("[*] Found %s at sector %lu\n", signatures[i].description, sectors_scraped);
                     files_recovered++;
 
-                    char out_filename[256]; //unique name for recovered file
+                    char out_filename[256]; //unique name for recovered file (the path is made here)
                     snprintf(out_filename, sizeof(out_filename), "recovered_files/recovered_%lu%s", 
                         files_recovered, signatures[i].extension);
 
                     printf("[*] Extraxting %s found at sector %lu -> %s\n", signatures[i].description, sectors_scraped, out_filename);
 
-                    FILE *recovered_file = fopen(out_filename, "wb");
+                    /*
+                    this code is the "Extraction Step." The moment your code finds the beginning of a lost file, 
+                    it opens a brand-new file on your computer and copies the data chunks over into it.
+                    */
+                    FILE *recovered_file = fopen(out_filename, "wb"); //Creates a new file (ex. recovered_1.png is born) using Write binary
+                    
+                    //make sure for errors
                     if (recovered_file != NULL) {
                         fwrite(sector, 1, sizeof(sector), recovered_file);
 
+                        /*
+                        You create a temporary 512-byte bucket (crawl_buffer). Then, we use ftell to drop a bookmark (cur_position) 
+                        exactly where we are on the disk Because we are about to go on a detour to grab the rest of the file, 
+                        and we need to remember how to get back to where we left off.
+                        */
                         unsigned char crawl_buffer[512];
                         long cur_position = ftell(disk); 
 
+                        //Keep grabbing sectors untile file is done
                         for (int block = 0; block < 2000; block++) {
                             if (fread(crawl_buffer, 1,sizeof(crawl_buffer), disk) == sizeof(crawl_buffer)) {
                                 fwrite(crawl_buffer, 1, sizeof(crawl_buffer), recovered_file);
@@ -93,8 +112,9 @@ void run_crawl(const char *device_path) {
         fclose(disk);
     }
 
-// ─── MODE 2: TARGET IS A REGULAR DIRECTORY FOLDER ───────────────────────
+// ─── MODE 2: TARGET IS A REGULAR DIRECTORY FOLDER (Only for Ghost copies/remnants) Non-Hard delete ───────────────────────
     else {
+        //Open the door to the directory/folder
         DIR *dir = opendir(device_path);
         if (dir == NULL) {
             perror("[!] Error opening target directory.");
@@ -102,15 +122,20 @@ void run_crawl(const char *device_path) {
             return;
         }
 
-        struct dirent *entry;
+        struct dirent *entry; //Directory entry
         unsigned long sectors_scraped = 0;
         unsigned long files_recovered = 0;
 
+        /*
+        readdir() reads the folder contents one item at a time. The while loop will keep spinning until 
+        it has looked at every single file and subfolder inside that directory.
+        */
         while ((entry = readdir(dir)) != NULL) {
             if (strcmp(entry->d_name, ".") == 0 || strncmp(entry->d_name, "..", 2) == 0) {
                 continue; // Skip current and parent directory entries
             }
 
+            //Glue the path of that specific file or directory
             char full_path[1024];
             snprintf(full_path, sizeof(full_path), "%s/%s", device_path, entry->d_name);
 
@@ -156,4 +181,4 @@ void run_crawl(const char *device_path) {
         printf("\n[*] Crawling complete. Total files scanned: %lu\n", sectors_scraped);
         printf("[*] Total files recovered: %lu\n", files_recovered);
     }
-}
+} 
