@@ -5,7 +5,7 @@ void run_log(void);
 void run_crawl(const char *device_path);
 void run_trail(const char *file_path);
 int run_pinch(const char *device_name);
-void run_puncture(const char *file_path);
+int run_puncture(const char *file_path);
 
 #endif
 
