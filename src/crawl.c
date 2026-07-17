@@ -64,31 +64,29 @@ void run_crawl(const char *device_path) {
                 //Gets the sectors's (file) magic bytes and byte length (if file is either of the signatures)
                 if (memcmp(sector, signatures[i].magic_bytes, signatures[i].length) == 0) {
                     printf("[*] Found %s at sector %lu\n", signatures[i].description, sectors_scraped);
+                    
+                    long sector_map = sectors_scraped - 1;
                     files_recovered++;
 
-                    char out_filename[256]; //unique name for recovered file (the path is made here)
-                    snprintf(out_filename, sizeof(out_filename), "recovered_files/recovered_%lu%s", 
-                        files_recovered, signatures[i].extension);
+                    long cur_position = ftell(disk);
 
-                    printf("[*] Extraxting %s found at sector %lu -> %s\n", signatures[i].description, sectors_scraped, out_filename);
+                    char staging_name[256]; //unique name for recovered file (the path is made here)
+                    snprintf(staging_name, sizeof(staging_name), "recovered_files/staging_%lu.tmp", 
+                            files_recovered);
 
-                    /*
-                    this code is the "Extraction Step." The moment your code finds the beginning of a lost file, 
-                    it opens a brand-new file on your computer and copies the data chunks over into it.
-                    */
-                    FILE *recovered_file = fopen(out_filename, "wb"); //Creates a new file (ex. recovered_1.png is born) using Write binary
-                    
+                    FILE *recovered_file = fopen(staging_name, "wb"); //Creates a new file (ex. recovered_1.png is born) using Write binary
+                    long total_blocks = 0;
+
                     //make sure for errors
                     if (recovered_file != NULL) {
                         fwrite(sector, 1, sizeof(sector), recovered_file);
-
+                        total_blocks++;
                         /*
                         You create a temporary 512-byte bucket (crawl_buffer). Then, we use ftell to drop a bookmark (cur_position) 
                         exactly where we are on the disk Because we are about to go on a detour to grab the rest of the file, 
                         and we need to remember how to get back to where we left off.
                         */
                         unsigned char crawl_buffer[512];
-                        long cur_position = ftell(disk); 
 
                         //Keep grabbing sectors untile file is done
                         for (int block = 0; block < 2000; block++) {
@@ -100,8 +98,16 @@ void run_crawl(const char *device_path) {
                         }
 
                         fclose(recovered_file);
-                        fseek(disk, cur_position, SEEK_SET); // Return to the original position in the disk
                     }
+                    char out_filename[256]; //unique name for recovered file (the path is made here)
+                    snprintf(out_filename, sizeof(out_filename), "recovered_files/recovered_S%ld_B%ld.%s", 
+                        sector_map, total_blocks, signatures[i].extension);
+
+                    rename(staging_name, out_filename);
+
+                    printf("[*] Extraxting %s found at sector %lu -> %s\n", signatures[i].description, sectors_scraped, out_filename);
+
+                    fseek(disk, cur_position, SEEK_SET); // Return to the original position in the disk
                     break;
                 }
             }
@@ -139,6 +145,11 @@ void run_crawl(const char *device_path) {
             char full_path[1024];
             snprintf(full_path, sizeof(full_path), "%s/%s", device_path, entry->d_name);
 
+            struct stat path_stat;
+            if (stat(full_path, &path_stat) != 0 || S_ISDIR(path_stat.st_mode)) {
+                continue;
+            }
+
             FILE *file = fopen(full_path, "rb");
             if (file == NULL) {
                 continue;
@@ -154,10 +165,16 @@ void run_crawl(const char *device_path) {
                 memcmp(header, signatures[i].magic_bytes, signatures[i].length) == 0) {
 
                     files_recovered++;
+                    long sector_map = 0;
+
+                    long total_blocks = path_stat.st_size / 512;
+                    if (path_stat.st_size % 512 != 0) {
+                        total_blocks++; // Account for partial trailing block configurations
+                    }
 
                     char destination[1200];
-                    snprintf(destination, sizeof(destination), "recovered_files/recovered_%lu%s", 
-                        files_recovered, signatures[i].extension);
+                    snprintf(destination, sizeof(destination), "recovered_files/recovered_S%ld_B%ld%s", 
+                        sector_map, total_blocks, signatures[i].extension);
 
                     printf("[*] Match! File '%s' is verified structurally as a %s\n", entry->d_name, signatures[i].description);
                    
@@ -171,6 +188,9 @@ void run_crawl(const char *device_path) {
                             fwrite(crawl_buffer, 1, bytes, dest_file);
                         }
                         fclose(dest_file);
+                    } else {
+                        perror("[!] Error creating extraxtion.");
+                        files_recovered--;
                     }
                     break;
                 }
