@@ -86,6 +86,11 @@ int main() {
         }
 
         if (strcmp(args[0], "trail") == 0) {
+            if (arg_count < 3) {
+                printf("[!] Usage: trail <carved_file_path> <active_file_path>\n");
+            } else {
+                run_trail(args[1]);
+            }
             continue;
         }
     
