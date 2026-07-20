@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <openssl/sha.h> 
 
-int filre_sha256(const char *file_path, char *out_hex) {
+int file_sha256(const char *file_path, char *out_hex) {
     FILE *file = fopen(file_path, "rb");
     if (!file) return -1;
 
@@ -12,7 +12,6 @@ int filre_sha256(const char *file_path, char *out_hex) {
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
 
-    //
     const int buffer_size = 32768;
     unsigned char *buffer = malloc(buffer_size);
     if (!buffer) {
