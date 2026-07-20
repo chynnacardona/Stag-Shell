@@ -4,6 +4,7 @@
 #include <sys/stat.h> //System FIle Status -- manages file attributes, metadata and security permissions
 #include <dirent.h> //Allows to open and read folder components, Directory entries
 #include "../include/beetle.h"
+#include "../include/sha_helper.h"
 
 typedef struct {
     const char *extension;
@@ -11,6 +12,11 @@ typedef struct {
     size_t length;
     const char *description;
 } FileSignature;
+
+//Active directory Invetory -- maps out active file hashes
+void active_whitelist(const char *mounted_path) {
+
+}
 
 void run_crawl(const char *device_path) {
     printf("[*] 🪲 Beetle crawling on %s\n", device_path);
@@ -27,6 +33,7 @@ void run_crawl(const char *device_path) {
         {".wav", (unsigned char[]){0x52, 0x49, 0x46, 0x46}, 4, "WAV Audio"},
         {".avi", (unsigned char[]){0x52, 0x49, 0x46, 0x46}, 4, "AVI Video"},
         {".mp4", (unsigned char[]){0x00, 0x00, 0x00, 0x18}, 4, "MP4 Video"},
+        {".mkv", (unsigned char[]){0x1A, 0x45, 0xDF, 0xA3}, 4, "MKV Video"},
 
         {".exe",  (unsigned char[]){0x4D, 0x5A}, 2, "Windows Executable / DOS MZ"},
         {".elf",  (unsigned char[]){0x7F, 0x45, 0x4C, 0x46}, 4, "Linux ELF Executable"},
@@ -58,16 +65,18 @@ void run_crawl(const char *device_path) {
         exactly how deep down the disk geometry the carver has traveled.
         */
         while (fread(sector, 1, sizeof(sector), disk) == sizeof(sector)) {
-            sectors_scraped++;
-
             for (size_t i = 0; i < num_signatures; i++) {
                 //Gets the sectors's (file) magic bytes and byte length (if file is either of the signatures)
                 if (memcmp(sector, signatures[i].magic_bytes, signatures[i].length) == 0) {
+                    //Ignore false-positive .exe hits on raw data noise
+                    if (strcmp(signatures[i].extension, ".exe") == 0) {
+                        continue; 
+                    }
+
                     printf("[*] Found %s at sector %lu\n", signatures[i].description, sectors_scraped);
                     
-                    long sector_map = sectors_scraped - 1;
+                    long sector_map = sectors_scraped;
                     files_recovered++;
-
                     long cur_position = ftell(disk);
 
                     char staging_name[256]; //unique name for recovered file (the path is made here)
@@ -87,30 +96,44 @@ void run_crawl(const char *device_path) {
                         and we need to remember how to get back to where we left off.
                         */
                         unsigned char crawl_buffer[512];
-
                         //Keep grabbing sectors untile file is done
                         for (int block = 0; block < 2000; block++) {
-                            if (fread(crawl_buffer, 1,sizeof(crawl_buffer), disk) == sizeof(crawl_buffer)) {
-                                fwrite(crawl_buffer, 1, sizeof(crawl_buffer), recovered_file);
+                            size_t read_bytes = fread(crawl_buffer, 1, sizeof(crawl_buffer), disk);
+                            if (read_bytes > 0) {
+                                fwrite(crawl_buffer, 1, read_bytes, recovered_file);
+                                total_blocks++;
+                                if (read_bytes < sizeof(crawl_buffer)) break;
                             } else {
                                 break;
                             }
                         }
-
                         fclose(recovered_file);
+
+                        char file_hash[65];
+                        if (file_sha256(staging_name, file_hash) == 0) {
+                            printf("[*] SHA256 of file: %s\n ", file_hash);
+                        }
+
+                        //FILTERING ENGINE:
+                        int active_file = 0;
+                        
+
+                        char out_filename[256]; //unique name for recovered file (the path is made here)
+                        snprintf(out_filename, sizeof(out_filename), "recovered_files/recovered_S%ld_B%ld%s", 
+                            sector_map, total_blocks, signatures[i].extension);
+
+                        rename(staging_name, out_filename);
+                        printf("[*] Extracted -> %s\n", out_filename);
+        
+                    } else {
+                        perror("[!] Error creating staging file extraction.");
+                        files_recovered--;
                     }
-                    char out_filename[256]; //unique name for recovered file (the path is made here)
-                    snprintf(out_filename, sizeof(out_filename), "recovered_files/recovered_S%ld_B%ld.%s", 
-                        sector_map, total_blocks, signatures[i].extension);
-
-                    rename(staging_name, out_filename);
-
-                    printf("[*] Extraxting %s found at sector %lu -> %s\n", signatures[i].description, sectors_scraped, out_filename);
-
                     fseek(disk, cur_position, SEEK_SET); // Return to the original position in the disk
-                    break;
+                        break;
                 }
             }
+            sectors_scraped++;
         }
 
         printf("\n[*] Crawling complete. Total sectors scraped: %lu\n", sectors_scraped);
